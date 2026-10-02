@@ -11,7 +11,10 @@ from finance_bot.settings import (
     SPREADSHEET_NAME,
 )
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 _SHEET = None
 _SHEET_LOCK = threading.Lock()
 
