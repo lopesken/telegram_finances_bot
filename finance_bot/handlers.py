@@ -1,10 +1,13 @@
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from finance_bot.spreadsheet import conectar_planilha
+
+FUSO_HORARIO = ZoneInfo("America/Sao_Paulo")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -50,7 +53,7 @@ async def registrar_lancamento(update: Update, context: ContextTypes.DEFAULT_TYP
 
     try:
         sheet = conectar_planilha()
-        data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+        data_hora = datetime.now(FUSO_HORARIO).strftime("%d/%m/%Y %H:%M")
         sheet.append_row([data_hora, descricao, valor, tipo])
 
         icone = "🟢" if tipo == "Receita" else "🔴"
@@ -76,7 +79,7 @@ async def relatorio_semanal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Nenhum lançamento encontrado.")
             return
 
-        limite_semana = datetime.now() - timedelta(days=7)
+        limite_semana = datetime.now(FUSO_HORARIO).date() - timedelta(days=7)
         total_receitas = 0.0
         total_despesas = 0.0
 
@@ -87,7 +90,9 @@ async def relatorio_semanal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data_str, _, valor_str, tipo = linha[0], linha[1], linha[2], linha[3]
 
             try:
-                data_item = datetime.strptime(data_str.split(" ")[0], "%d/%m/%Y")
+                data_item = datetime.strptime(
+                    data_str.split(" ")[0], "%d/%m/%Y"
+                ).date()
                 valor = float(valor_str.replace(",", "."))
 
                 if data_item >= limite_semana:
@@ -122,7 +127,7 @@ async def relatorio_mensal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Nenhum lançamento encontrado.")
             return
 
-        hoje = datetime.now()
+        hoje = datetime.now(FUSO_HORARIO)
         mes_atual = hoje.month
         ano_atual = hoje.year
         total_receitas = 0.0
