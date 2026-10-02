@@ -1,1 +1,1 @@
-from bot import telegram_webhook
+from finance_bot.webhook import telegram_webhook
