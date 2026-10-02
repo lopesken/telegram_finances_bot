@@ -1,6 +1,9 @@
 import os
 import logging
+import asyncio
 from datetime import datetime, timedelta
+
+import functions_framework
 import gspread
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
@@ -17,6 +20,7 @@ from telegram.ext import (
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Carregar variáveis de ambiente do .env
 load_dotenv()
@@ -31,6 +35,20 @@ def conectar_planilha():
     creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
     client = gspread.authorize(creds)
     return client.open(NOME_PLANILHA).sheet1
+
+
+def criar_aplicacao():
+    if not TOKEN:
+        raise ValueError("ERRO: TELEGRAM_TOKEN não foi configurado.")
+
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("semanal", relatorio_semanal))
+    app.add_handler(CommandHandler("mensal", relatorio_mensal))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, registrar_lancamento)
+    )
+    return app
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -195,22 +213,38 @@ async def relatorio_mensal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Erro ao gerar o relatório mensal.")
 
 
-# --- REGISTRO DOS COMANDOS E EXECUÇÃO ---
-if __name__ == "__main__":
-    if not TOKEN:
-        raise ValueError("ERRO: TELEGRAM_TOKEN não foi encontrado no arquivo .env!")
+async def processar_update(dados_update):
+    app = criar_aplicacao()
+    inicializada = False
+    iniciada = False
 
-    app = ApplicationBuilder().token(TOKEN).build()
+    try:
+        await app.initialize()
+        inicializada = True
+        await app.start()
+        iniciada = True
 
-    # Comandos
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("semanal", relatorio_semanal))
-    app.add_handler(CommandHandler("mensal", relatorio_mensal))
+        update = Update.de_json(dados_update, app.bot)
+        await app.process_update(update)
+    finally:
+        try:
+            if iniciada:
+                await app.stop()
+        finally:
+            if inicializada:
+                await app.shutdown()
 
-    # Handler para mensagens de texto comuns
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, registrar_lancamento)
-    )
 
-    print("🤖 Bot rodando...")
-    app.run_polling()
+@functions_framework.http
+def telegram_webhook(request):
+    """Recebe e processa um update enviado pelo webhook do Telegram."""
+    if request.method != "POST":
+        return ("Método não permitido", 405)
+
+    dados_update = request.get_json(silent=True)
+    if not isinstance(dados_update, dict):
+        return ("Corpo JSON inválido", 400)
+
+    asyncio.run(processar_update(dados_update))
+
+    return ("", 200)

@@ -1,4 +1,6 @@
 python-telegram-bot
+functions-framework
 gspread
 google-auth
 python-dotenv
+pyTelegramBotAPI
